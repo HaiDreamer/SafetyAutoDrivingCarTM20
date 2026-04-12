@@ -1,0 +1,8 @@
+TmrlData/
+*.pt
+*.pth
+*.ckpt
+*.zip
+*.npy
+*.csv
+__pycache__/
