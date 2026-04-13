@@ -37,7 +37,7 @@ observation space: [speed, gear, rpm, image history]
 # Globals ==============================================================================================================
 
 CHECK_FORWARD = 500  # this allows (and rewards) 50m cuts
-_lidar_log = open("lidar_calibration.txt", "w", buffering=1)  # line-buffered
+# _lidar_log = open("lidar_calibration.txt", "w", buffering=1)  # line-buffered
 
 # Interface for Trackmania 2020 ========================================================================================
 
@@ -319,7 +319,8 @@ class TM2020InterfaceLidar(TM2020Interface):
 
         # --- WALL COLLISION DETECTION via LIDAR ---
         min_lidar = float(np.min(img))
-        min_lidar_nonzero = img[img > 0]
+        current_lidar = img[-1]  # only the most recent frame, shape (19,)
+        min_lidar_nonzero = current_lidar[current_lidar > 0]
         min_nonzero = float(np.min(min_lidar_nonzero)) if len(min_lidar_nonzero) > 0 else 999.0
         near_wall = min_nonzero < self.wall_hit_threshold
 
@@ -336,8 +337,9 @@ class TM2020InterfaceLidar(TM2020Interface):
                 self.last_crash_time = now
                 speed_factor = float(speed[0]) / 100.0
                 rew -= self.wall_penalty * (1.0 + speed_factor)   # e.g. -1.0 at 100 km/h
-                if self.crash_count >= self.max_crashes:
-                    terminated = True
+            if self.crash_count >= self.max_crashes:
+                terminated = True
+                # print(f"[DEBUG] Terminated by crash_count={self.crash_count}, min_nonzero={min_nonzero:.1f}")  # remove later
             self.was_near_wall = True
         else:
             self.was_near_wall = False
@@ -401,16 +403,17 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         info = {}
 
         # --- WALL COLLISION DETECTION via LIDAR ---
-        min_lidar_nonzero = img[img > 0]
+        current_lidar = img[-1]  # only the most recent frame, shape (19,)
+        min_lidar_nonzero = current_lidar[current_lidar > 0]
         min_nonzero = float(np.min(min_lidar_nonzero)) if len(min_lidar_nonzero) > 0 else 999.0
         near_wall = min_nonzero < self.wall_hit_threshold
 
-        # 1. Proximity gradient
+        # Proximity gradient
         if min_nonzero < self.soft_zone:
             t = (self.soft_zone - min_nonzero) / (self.soft_zone - self.wall_hit_threshold)
             rew -= self.wall_hugging_penalty * float(np.clip(t, 0.0, 1.0))
 
-        # 2. Crash event: debounced, speed-scaled hard penalty
+        # Crash event: debounced, speed-scaled hard penalty
         if near_wall:
             now = time.time()
             if now - self.last_crash_time >= self.crash_debounce_sec:

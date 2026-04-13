@@ -25,10 +25,11 @@ DEBUG_MODE = False      # set True for verbose debug logging
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CSV Loss Logger                                                   ADDED
+# CSV Loss Logger                                                   
 # ──────────────────────────────────────────────────────────────────────────────
 # output directory (change later via config)
 _CSV_LOG_DIR = r"D:\Internship-AutoDrivingCar"              
+_CSV_LOG_INTERVAL = 100  # log every N steps
 
 def _get_csv_writer(filename: str, fieldnames: list):        
     """
@@ -408,8 +409,9 @@ class SpinupSacAgent(TrainingAgent):  # Adapted from Spinup
         if not hasattr(self, "_step_count"):                        
             self._step_count = 0                                  
         self._step_count += 1                                      
-        _append_loss_row(self._csv_writer, self._step_count, ret_dict)  
-        self._csv_file.flush()                          
+        if self._step_count % _CSV_LOG_INTERVAL == 0: 
+            _append_loss_row(self._csv_writer, self._step_count, ret_dict)
+            self._csv_file.flush()                          
         # ─────────────────────────────────────────────────────────────
 
         return ret_dict
@@ -565,8 +567,9 @@ class REDQSACAgent(TrainingAgent):
         if not hasattr(self, "_step_count"):                
             self._step_count = 0                          
         self._step_count += 1                              
-        _append_loss_row(self._csv_writer, self._step_count, ret_dict) 
-        self._csv_file.flush()              
+        if self._step_count % _CSV_LOG_INTERVAL == 0: 
+            _append_loss_row(self._csv_writer, self._step_count, ret_dict)
+            self._csv_file.flush()              
         # ─────────────────────────────────────────────────────────────
 
         return ret_dict
