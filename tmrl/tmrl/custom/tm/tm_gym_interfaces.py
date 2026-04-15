@@ -311,6 +311,14 @@ class TM2020InterfaceLidar(TM2020Interface):
         """
         img, speed, data = self.grab_lidar_speed_and_data()
         rew, terminated = self.reward_function.compute_reward(pos=np.array([data[2], data[3], data[4]]))
+        # count as crash if reward_function terminates due to no progress (car stuck on wall)
+        if terminated and not bool(data[8]):  # not end_of_track = stuck/failure termination
+            now = time.time()
+            if now - self.last_crash_time >= self.crash_debounce_sec:
+                self.crash_count += 1
+                self.last_crash_time = now
+                speed_factor = float(speed[0]) / 100.0
+                rew -= self.wall_penalty * (1.0 + speed_factor)
         self.img_hist.append(img)
         imgs = np.array(list(self.img_hist), dtype='float32')
         obs = [speed, imgs]
@@ -340,6 +348,7 @@ class TM2020InterfaceLidar(TM2020Interface):
             if self.crash_count >= self.max_crashes:
                 terminated = True
                 # print(f"[DEBUG] Terminated by crash_count={self.crash_count}, min_nonzero={min_nonzero:.1f}")  # remove later
+                print(f"[DEBUG] near_wall={near_wall}, min_nonzero={min_nonzero:.1f}, terminated={terminated}, crash_count={self.crash_count}")
             self.was_near_wall = True
         else:
             self.was_near_wall = False
@@ -395,6 +404,14 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         """
         img, speed, data = self.grab_lidar_speed_and_data()
         rew, terminated = self.reward_function.compute_reward(pos=np.array([data[2], data[3], data[4]]))
+        # count as crash if reward_function terminates due to no progress (car stuck on wall)
+        if terminated and not bool(data[8]):  # not end_of_track = stuck/failure termination
+            now = time.time()
+            if now - self.last_crash_time >= self.crash_debounce_sec:
+                self.crash_count += 1
+                self.last_crash_time = now
+                speed_factor = float(speed[0]) / 100.0
+                rew -= self.wall_penalty * (1.0 + speed_factor)
         progress = np.array([self.reward_function.cur_idx / self.reward_function.datalen], dtype='float32')
         self.img_hist.append(img)
         imgs = np.array(list(self.img_hist), dtype='float32')
@@ -421,8 +438,10 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
                 self.last_crash_time = now
                 speed_factor = float(speed[0]) / 100.0
                 rew -= self.wall_penalty * (1.0 + speed_factor)
-                if self.crash_count >= self.max_crashes:
-                    terminated = True
+            if self.crash_count >= self.max_crashes:
+                terminated = True
+                # print(f"[DEBUG] Terminated by crash_count={self.crash_count}, min_nonzero={min_nonzero:.1f}")  # remove later
+                print(f"[DEBUG] near_wall={near_wall}, min_nonzero={min_nonzero:.1f}, terminated={terminated}, crash_count={self.crash_count}")
         # ----------------------------------------
 
         if end_of_track:
