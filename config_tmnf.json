@@ -1,11 +1,11 @@
 {
-  "RUN_NAME": "SAC_lidar_v1_seed1",
+  "RUN_NAME": "SAC_lidar_tmnf",
   "RESET_TRAINING": false,
   "BUFFERS_MAXLEN": 500000,
-  "RW_MAX_SAMPLES_PER_EPISODE": 1000,
+  "RW_MAX_SAMPLES_PER_EPISODE": 5000,
   "CUDA_TRAINING": true,
   "CUDA_INFERENCE": false,
-  "VIRTUAL_GAMEPAD": true,
+  "VIRTUAL_GAMEPAD": false,
   "DCAC": false,
   "LOCALHOST_WORKER": false,
   "LOCALHOST_TRAINER": false,
@@ -41,16 +41,16 @@
   "MAX_EPOCHS": 10000,
   "ROUNDS_PER_EPOCH": 10,
   "TRAINING_STEPS_PER_ROUND": 1000,
-  "MAX_TRAINING_STEPS_PER_ENVIRONMENT_STEP": 8.0,
+  "MAX_TRAINING_STEPS_PER_ENVIRONMENT_STEP": 4.0,
   "ENVIRONMENT_STEPS_BEFORE_TRAINING": 1000,
   "UPDATE_MODEL_INTERVAL": 1000,
   "UPDATE_BUFFER_INTERVAL": 1000,
   "SAVE_MODEL_EVERY": 0,
   "MEMORY_SIZE": 1000000,
-  "BATCH_SIZE": 512,
+  "BATCH_SIZE": 256,
   "ALG": {
     "ALGORITHM": "SAC",
-    "LEARN_ENTROPY_COEF":false,
+    "LEARN_ENTROPY_COEF":true,
     "LR_ACTOR":0.00001,
     "LR_CRITIC":0.00005,
     "LR_ENTROPY":0.0003,
@@ -69,13 +69,13 @@
 	"L2_CRITIC": 0.0
   },
   "ENV": {
-    "RTGYM_INTERFACE": "TM20LIDAR",
+    "RTGYM_INTERFACE": "TMNFLIDAR",
     "WINDOW_WIDTH": 958,
     "WINDOW_HEIGHT": 488,
 	"IMG_WIDTH": 64,
     "IMG_HEIGHT": 64,
 	"IMG_GRAYSCALE": true,
-    "SLEEP_TIME_AT_RESET": 1.5,
+    "SLEEP_TIME_AT_RESET": 0.5,
     "IMG_HIST_LEN": 4,
     "RTGYM_CONFIG": {
       "time_step_duration": 0.05,
@@ -84,8 +84,8 @@
       "act_buf_len": 2,
       "benchmark": false,
       "wait_on_done": true,
-      "ep_max_length": 1000,
-	  "interface_kwargs": {"save_replays": false}
+      "ep_max_length": 5000,
+	  "interface_kwargs": {"save_replays": false, "game_speed": 2.0}
     },
 	"REWARD_CONFIG": {
 		"END_OF_TRACK": 100.0,

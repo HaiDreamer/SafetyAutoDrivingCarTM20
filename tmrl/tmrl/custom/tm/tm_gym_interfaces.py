@@ -81,6 +81,7 @@ class TM2020Interface(RealTimeGymInterface):
 
     def initialize_common(self):
         # Create a virtual gamepad if one is enabled, so the agent can send controller inputs.
+        self._last_action = self.get_default_action()
         if self.gamepad:
             import vgamepad as vg
             self.j = vg.VX360Gamepad()
@@ -116,16 +117,18 @@ class TM2020Interface(RealTimeGymInterface):
         Args:
             control: np.array: [forward,backward,right,left]
         """
+        self._last_action = control if control is not None else self.get_default_action()  
         if self.gamepad:
             if control is not None:
                 control_gamepad(self.j, control)
         else:
             if control is not None:
                 actions = []
-                if control[0] > 0:
+                if control[0] > 0.2:           # gas: only if clearly positive
                     actions.append('f')
-                if control[1] > 0:
+                elif control[1] > 0.2:         # brake: only if clearly positive AND not gassing
                     actions.append('b')
+                # both near zero → coast (neither appended)
                 if control[2] > 0.5:
                     actions.append('r')
                 elif control[2] < -0.5:
@@ -215,7 +218,11 @@ class TM2020Interface(RealTimeGymInterface):
         rpm = np.array([
             data[10],
         ], dtype='float32')
-        rew, terminated = self.reward_function.compute_reward(pos=np.array([data[2], data[3], data[4]]))
+        rew, terminated = self.reward_function.compute_reward(
+            pos=np.array([data[2], data[3], data[4]]),
+            speed=float(data[0]),
+            action=self._last_action
+        )
         self.img_hist.append(img)
         imgs = np.array(list(self.img_hist))
         obs = [speed, gear, rpm, imgs]
@@ -271,7 +278,7 @@ class TM2020InterfaceLidar(TM2020Interface):
         self.soft_zone = 20.0            # proximity gradient starts here
         self.wall_hugging_penalty = 0.05 # per-step penalty while inside soft_zone
         self.was_near_wall = False
-        self.max_crashes = 10            # if collide too much, terminate
+        self.max_crashes = 20            # if collide too much, terminate
 
     def grab_lidar_speed_and_data(self):
         img = self.window_interface.screenshot()[:, :, :3]

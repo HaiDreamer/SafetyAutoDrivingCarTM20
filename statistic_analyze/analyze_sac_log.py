@@ -41,7 +41,7 @@ import matplotlib.gridspec as gridspec
 import numpy as np
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DEFAULT_CSV = r"D:\Internship-AutoDrivingCar\sac_loss_log.csv"
+DEFAULT_CSV = r"D:\Internship-AutoDrivingCar\sac_loss_log_2.csv"
 SMOOTH_WINDOW = 50          # rolling average window (steps)
 # After
 SPIKE_STD_MULT = {      # flag values beyond mean ± N*std as spikes

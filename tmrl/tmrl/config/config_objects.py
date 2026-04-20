@@ -14,6 +14,7 @@ from tmrl.envs import GenericGymEnv
 from tmrl.custom.custom_models import SquashedGaussianMLPActor, MLPActorCritic, REDQMLPActorCritic, RNNActorCritic, SquashedGaussianRNNActor, SquashedGaussianVanillaCNNActor, VanillaCNNActorCritic, SquashedGaussianVanillaColorCNNActor, VanillaColorCNNActorCritic
 from tmrl.custom.custom_algorithms import SpinupSacAgent as SAC_Agent
 from tmrl.custom.custom_algorithms import REDQSACAgent as REDQ_Agent
+from tmrl.custom.tm.tmnf_interfaces import TMNFInterface
 from tmrl.custom.custom_checkpoints import update_run_instance      # checkpoint update
 from tmrl.util import partial       # pre-fill constructor arguments and create ready-to-use class factories ???
 
@@ -35,7 +36,11 @@ assert ALG_NAME in ["SAC", "REDQSAC"], f"If you wish to implement {ALG_NAME}, do
 # MODEL, GYM ENVIRONMENT, REPLAY MEMORY AND TRAINING: ===========
 
 # Model selection: lidar vs image pipeline
-if cfg.PRAGMA_LIDAR:
+if cfg.ENV_CONFIG["RTGYM_INTERFACE"] == "TMNFLIDAR":     
+    INT = partial(TMNFInterface) 
+    TRAIN_MODEL = MLPActorCritic
+    POLICY = SquashedGaussianMLPActor
+elif cfg.PRAGMA_LIDAR:
     if cfg.PRAGMA_RNN:
         assert ALG_NAME == "SAC", f"{ALG_NAME} is not implemented here."
         TRAIN_MODEL = RNNActorCritic
@@ -50,7 +55,9 @@ else:
     POLICY = SquashedGaussianVanillaCNNActor if cfg.GRAYSCALE else SquashedGaussianVanillaColorCNNActor
 
 # Environment interface selection
-if cfg.PRAGMA_LIDAR:
+if cfg.ENV_CONFIG["RTGYM_INTERFACE"] == "TMNFLIDAR":
+    INT = partial(TMNFInterface, game_speed=2.0) 
+elif cfg.PRAGMA_LIDAR:
     if cfg.PRAGMA_PROGRESS:
         INT = partial(TM2020InterfaceLidarProgress, img_hist_len=cfg.IMG_HIST_LEN, gamepad=cfg.PRAGMA_GAMEPAD)  # lidar + progress
     else:
@@ -71,7 +78,9 @@ for k, v in CONFIG_DICT_MODIFIERS.items():
 
 # how rollout samples are compressed before being sent through the local or remote networking path
 # to compress a sample before sending it over the local network/Internet. WHy? image observations are much heavier than lidar vectors
-if cfg.PRAGMA_LIDAR:
+if cfg.ENV_CONFIG["RTGYM_INTERFACE"] == "TMNFLIDAR":
+    SAMPLE_COMPRESSOR = get_local_buffer_sample_lidar
+elif cfg.PRAGMA_LIDAR:
     if cfg.PRAGMA_PROGRESS:
         SAMPLE_COMPRESSOR = get_local_buffer_sample_lidar_progress
     else:
@@ -80,7 +89,9 @@ else:
     SAMPLE_COMPRESSOR = get_local_buffer_sample_tm20_imgs
 
 # to preprocess observations that come out of the gymnasium environment before entering the model:
-if cfg.PRAGMA_LIDAR:
+if cfg.ENV_CONFIG["RTGYM_INTERFACE"] == "TMNFLIDAR":
+    OBS_PREPROCESSOR = obs_preprocessor_tm_lidar_act_in_obs
+elif cfg.PRAGMA_LIDAR:
     if cfg.PRAGMA_PROGRESS:
         OBS_PREPROCESSOR = obs_preprocessor_tm_lidar_progress_act_in_obs
     else:
@@ -93,7 +104,9 @@ SAMPLE_PREPROCESSOR = None
 assert not cfg.PRAGMA_RNN, "RNNs not supported yet"
 
 # replay memory selection
-if cfg.PRAGMA_LIDAR:
+if cfg.ENV_CONFIG["RTGYM_INTERFACE"] == "TMNFLIDAR":
+    MEM = MemoryTMLidar
+elif cfg.PRAGMA_LIDAR:
     if cfg.PRAGMA_RNN:
         assert False, "not implemented"
     else:
@@ -166,7 +179,7 @@ def sac_v2_entropy_scheduler(agent, epoch):
 # final environment factory that the trainer will use
 ENV_CLS = partial(GenericGymEnv, id=cfg.RTGYM_VERSION, gym_kwargs={"config": CONFIG_DICT})
 
-if cfg.PRAGMA_LIDAR:  # lidar
+if cfg.ENV_CONFIG["RTGYM_INTERFACE"] == "TMNFLIDAR" or cfg.PRAGMA_LIDAR:        # LIDAR for both mode TM20 and TMNF
     TRAINER = partial(
         TorchTrainingOffline,
         env_cls=ENV_CLS,

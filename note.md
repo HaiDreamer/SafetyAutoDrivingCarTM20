@@ -36,12 +36,12 @@ Open 3 terminals:
     python -m tmrl --worker
 Baseline: (TM20IMAGES)
     python -m tmrl --server
-    python -m tmrl --worker --seed 0 --run-name baseline_seed0
-    python -m tmrl --trainer --seed 0 --run-name baseline_seed0
+    python -m tmrl --worker --seed 0 --run-name baseline_seed1
+    python -m tmrl --trainer --seed 0 --run-name baseline_seed1
 Baseline: (TM20LIDAR)
     python -m tmrl --server
-    python -m tmrl --worker --seed 0 --run-name SAC_lidar_v1_seed0
-    python -m tmrl --trainer --seed 0 --run-name SAC_lidar_v1_seed0
+    python -m tmrl --worker --seed 0 --run-name SAC_lidar_v1_seed1
+    python -m tmrl --trainer --seed 0 --run-name SAC_lidar_v1_seed1
     LINUX
         python3 -m tmrl --server
             INFO:2026-04-07 09:23:34,238:Local for server: Started to connect.
@@ -95,6 +95,10 @@ Setup reward value (for each correct action/wrong action)
 ## Runtime + reward score per epoch saving in CSV file 
 C:\Users\Admin\AppData\Local\Programs\Python\Python313\Lib\site-packages\tmrl\networking.py 
     *Have modified to save file in .csv, IF run python -m tmrl --worker inside PS D:\Internship-AutoDrivingCar>, .csv file will be in this folder path
+
+## TMNF
+C:\Users\Admin\OneDrive\Documents\TMInterface\Plugins\Python_Link.as 
+
 
 ## Problems: know and avoid
 # Setup/pipeline 

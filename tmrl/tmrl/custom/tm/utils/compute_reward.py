@@ -45,10 +45,11 @@ class RewardFunction:
         self.step_counter = 0
         self.failure_counter = 0
         self.datalen = len(self.data)
+        self.prev_throttle = 0.0
 
         # self.traj = []
 
-    def compute_reward(self, pos):
+    def compute_reward(self, pos, speed=0.0, action=None):
         """
         Computes the current reward given the position pos
         Args:
@@ -112,6 +113,21 @@ class RewardFunction:
 
         self.cur_idx = best_index  # finally, we save our new best matching index
 
+        # --- brake punishment ---
+        brake_penalty = 0.0
+        if action is not None:
+            action_brake = action[1] > 0.2
+            is_turning = abs(action[2]) > 0.5          # same threshold as send_control
+            if action_brake and not is_turning:         # penalize brake only when going straight
+                brake_penalty = -0.02
+
+        throttle = action[0] if action is not None else 0.0     # gas/acceleration value the agent output this step, a float in [-1, 1]
+        smoothness_penalty = -0.005 * abs(throttle - self.prev_throttle)    # penalizes how much the gas changed between the previous step and the current step
+        self.prev_throttle = throttle
+
+        reward += brake_penalty + smoothness_penalty 
+        # ------
+
         return reward, terminated
 
     def reset(self):
@@ -127,5 +143,6 @@ class RewardFunction:
         self.cur_idx = 0
         self.step_counter = 0
         self.failure_counter = 0
+        self.prev_throttle = 0.0 
 
         # self.traj = []
