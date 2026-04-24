@@ -43,11 +43,14 @@ Baseline: (TM20LIDAR)
     python -m tmrl --worker --seed 0 --run-name SAC_lidar_v1_seed1
     python -m tmrl --trainer --seed 0 --run-name SAC_lidar_v1_seed1
     LINUX
-        python3 -m tmrl --server
-            INFO:2026-04-07 09:23:34,238:Local for server: Started to connect.
-            INFO:2026-04-07 09:23:34,238:Listening on TCP to port 6666
-            INFO:2026-04-07 09:23:34,239:Local for server: Connected.
-        python3 -m tmrl --trainer --seed 0 --run-name SAC_lidar_v1_seed0
+        python -m tmrl --server
+        python -m tmrl --trainer --seed 0 --run-name SAC_lidar_v1_seed1
+NEW MAP
+    Linux
+    python -m tmrl --server
+    python -m tmrl --trainer --seed 0 --run-name SAC_lidar_v4_seed0
+    Local
+    python -m tmrl --worker --seed 0 --run-name SAC_lidar_v4_seed0
 
 Troubleshooting (the 2 most common blockers)
     No connection / nothing happens when you run --test
@@ -55,15 +58,13 @@ Troubleshooting (the 2 most common blockers)
     Port conflict (connection fails)
     TMRL uses a fixed port by default; if another app is using it, you’ll see connection issues. A maintainer notes this commonly happens when something is already using the port (e.g., 9000).
 
-“Avoidance system” in Trackmania: RL vs CV
-In Trackmania, “avoidance” usually means don’t hit walls / don’t go off-track / don’t get stuck. RL is typically the most effective because the agent learns control (steer/throttle/brake), not just detection.
-
-
 
 ## TMRL engine (of theirs)
 Path to edit configurations for model training: "C:\Users\Admin\TmrlData\config\config.json"
 
 # Reward setup: BASED on theory of target
+Run reference: python -m tmrl --record-reward
+
 What is Our target ? (what should i choose)
     Safety
     Efficiency (lowest time to finish the road)

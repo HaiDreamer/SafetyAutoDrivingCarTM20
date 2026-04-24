@@ -6,3 +6,5 @@ TmrlData/
 *.npy
 *.csv
 __pycache__/
+*.tcpt
+*.png

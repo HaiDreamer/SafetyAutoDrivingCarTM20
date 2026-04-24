@@ -225,7 +225,10 @@ class TMNFInterface(RealTimeGymInterface):
         self.reward_function.reset()
         self.prev_cp = 0
         self._last_race_time = 0
-        time.sleep(0.5)
+        # wait until the game actually restarts
+        timeout = time.time() + 10
+        while self.client.race_time > 100 and time.time() < timeout:
+            time.sleep(0.05)
         obs = self._build_obs()
         return obs, {}
 

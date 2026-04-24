@@ -106,6 +106,7 @@ class TM2020Interface(RealTimeGymInterface):
     def initialize(self):
         self.initialize_common()
         self.small_window = True
+        self.lidar = Lidar(self.window_interface.screenshot()[:386, :760, :3])
         self.initialized = True
 
     def send_control(self, control):
@@ -124,7 +125,7 @@ class TM2020Interface(RealTimeGymInterface):
         else:
             if control is not None:
                 actions = []
-                if control[0] > 0.2:           # gas: only if clearly positive
+                if control[0] > 0.0:           # gas: only if clearly positive (>0.2)
                     actions.append('f')
                 elif control[1] > 0.2:         # brake: only if clearly positive AND not gassing
                     actions.append('b')
@@ -137,7 +138,7 @@ class TM2020Interface(RealTimeGymInterface):
 
     def grab_data_and_img(self):
         '''take screen shot form Trackmaniaand pull telemetry from the game client'''
-        img = self.window_interface.screenshot()[:, :, :3]  # BGR ordering
+        img = self.window_interface.screenshot()[:386, :760, :3]  # BGR ordering
         if self.resize_to is not None:  # cv2.resize takes dim as (width, height)
             img = cv2.resize(img, self.resize_to)
         if self.grayscale:
@@ -278,10 +279,20 @@ class TM2020InterfaceLidar(TM2020Interface):
         self.soft_zone = 20.0            # proximity gradient starts here
         self.wall_hugging_penalty = 0.05 # per-step penalty while inside soft_zone
         self.was_near_wall = False
-        self.max_crashes = 20            # if collide too much, terminate
+        self.max_crashes = 10            # if collide too much, terminate
 
     def grab_lidar_speed_and_data(self):
-        img = self.window_interface.screenshot()[:, :, :3]
+        # raw = self.window_interface.screenshot()
+        # print(f"row 370: {raw[370, 475, :3]}")
+        # print(f"row 380: {raw[380, 475, :3]}")
+        # print(f"row 390: {raw[390, 475, :3]}")
+        # print(f"row 400: {raw[400, 475, :3]}")
+        img = self.window_interface.screenshot()[:386, :760, :3]
+        # debug = img.copy()
+        # h, w, _ = debug.shape
+        # rp = (44*h//49, w//2)
+        # cv2.circle(debug, (rp[1], rp[0]), 8, (0, 0, 255), -1)
+        # cv2.imwrite("debug_screenshot.png", debug)
         data = self.client.retrieve_data()
         speed = np.array([
             data[0],
@@ -292,7 +303,7 @@ class TM2020InterfaceLidar(TM2020Interface):
     def initialize(self):
         super().initialize_common()
         self.small_window = False
-        self.lidar = Lidar(self.window_interface.screenshot())
+        self.lidar = Lidar(self.window_interface.screenshot()[:386, :760, :3])
         self.initialized = True
 
     def reset(self, seed=None, options=None):
@@ -318,14 +329,6 @@ class TM2020InterfaceLidar(TM2020Interface):
         """
         img, speed, data = self.grab_lidar_speed_and_data()
         rew, terminated = self.reward_function.compute_reward(pos=np.array([data[2], data[3], data[4]]))
-        # count as crash if reward_function terminates due to no progress (car stuck on wall)
-        if terminated and not bool(data[8]):  # not end_of_track = stuck/failure termination
-            now = time.time()
-            if now - self.last_crash_time >= self.crash_debounce_sec:
-                self.crash_count += 1
-                self.last_crash_time = now
-                speed_factor = float(speed[0]) / 100.0
-                rew -= self.wall_penalty * (1.0 + speed_factor)
         self.img_hist.append(img)
         imgs = np.array(list(self.img_hist), dtype='float32')
         obs = [speed, imgs]
@@ -334,9 +337,10 @@ class TM2020InterfaceLidar(TM2020Interface):
 
         # --- WALL COLLISION DETECTION via LIDAR ---
         min_lidar = float(np.min(img))
-        current_lidar = img[-1]  # only the most recent frame, shape (19,)
+        current_lidar = imgs[-1]  # only the most recent frame, shape (19,)
         min_lidar_nonzero = current_lidar[current_lidar > 0]
         min_nonzero = float(np.min(min_lidar_nonzero)) if len(min_lidar_nonzero) > 0 else 999.0
+        # _lidar_log.write(f"{min_nonzero:.2f} near={min_nonzero < self.wall_hit_threshold} raw={img.tolist()}\n")  # ADD
         near_wall = min_nonzero < self.wall_hit_threshold
 
         # 1. Proximity gradient: small continuous penalty scaling from soft_zone down to wall_hit_threshold
@@ -371,6 +375,9 @@ class TM2020InterfaceLidar(TM2020Interface):
 
         if end_of_track:
             rew += self.finish_reward
+            # bonus for finishing fast: fewer steps = higher bonus
+            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 2000.0)) * 50.0
+            rew += time_bonus
             terminated = True
         rew += self.constant_penalty
         rew = np.float32(rew)
@@ -411,14 +418,6 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         """
         img, speed, data = self.grab_lidar_speed_and_data()
         rew, terminated = self.reward_function.compute_reward(pos=np.array([data[2], data[3], data[4]]))
-        # count as crash if reward_function terminates due to no progress (car stuck on wall)
-        if terminated and not bool(data[8]):  # not end_of_track = stuck/failure termination
-            now = time.time()
-            if now - self.last_crash_time >= self.crash_debounce_sec:
-                self.crash_count += 1
-                self.last_crash_time = now
-                speed_factor = float(speed[0]) / 100.0
-                rew -= self.wall_penalty * (1.0 + speed_factor)
         progress = np.array([self.reward_function.cur_idx / self.reward_function.datalen], dtype='float32')
         self.img_hist.append(img)
         imgs = np.array(list(self.img_hist), dtype='float32')
@@ -427,7 +426,7 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         info = {}
 
         # --- WALL COLLISION DETECTION via LIDAR ---
-        current_lidar = img[-1]  # only the most recent frame, shape (19,)
+        current_lidar = imgs[-1]  # only the most recent frame, shape (19,)
         min_lidar_nonzero = current_lidar[current_lidar > 0]
         min_nonzero = float(np.min(min_lidar_nonzero)) if len(min_lidar_nonzero) > 0 else 999.0
         near_wall = min_nonzero < self.wall_hit_threshold

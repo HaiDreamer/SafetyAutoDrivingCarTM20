@@ -46,6 +46,8 @@ class RewardFunction:
         self.failure_counter = 0
         self.datalen = len(self.data)
         self.prev_throttle = 0.0
+        self.corner_lookahead = 20
+        self.corner_angle_threshold = 20.0  # degrees
 
         # self.traj = []
 
@@ -117,18 +119,37 @@ class RewardFunction:
         brake_penalty = 0.0
         if action is not None:
             action_brake = action[1] > 0.2
-            is_turning = abs(action[2]) > 0.5          # same threshold as send_control
-            if action_brake and not is_turning:         # penalize brake only when going straight
-                brake_penalty = -0.02
+            is_turning = abs(action[2]) > 0.5
+            if action_brake and not is_turning:
+                already_slow = speed < 40.0
+                no_corner_ahead = not self._is_corner_ahead()
+                if no_corner_ahead or (already_slow and no_corner_ahead):
+                    brake_penalty = -0.00001      # inital: -0.00001, mid: -0.001
 
         throttle = action[0] if action is not None else 0.0     # gas/acceleration value the agent output this step, a float in [-1, 1]
-        smoothness_penalty = -0.005 * abs(throttle - self.prev_throttle)    # penalizes how much the gas changed between the previous step and the current step
+        smoothness_penalty = -0.001 * abs(throttle - self.prev_throttle)    # penalizes how much the gas changed between the previous step and the current step
         self.prev_throttle = throttle
 
-        reward += brake_penalty + smoothness_penalty 
+        reward += brake_penalty + smoothness_penalty #- 0.0001
         # ------
 
         return reward, terminated
+    
+    def _is_corner_ahead(self):
+        end = min(self.cur_idx + self.corner_lookahead, self.datalen - 1)
+        for i in range(self.cur_idx, end - 1):
+            v1 = self.data[i + 1] - self.data[i]
+            v2 = self.data[min(i + 2, self.datalen - 1)] - self.data[i + 1]
+            v1 = np.array([v1[0], v1[2]])  # ADD: XZ only, ignore Y (vertical)
+            v2 = np.array([v2[0], v2[2]])  # ADD: XZ only, ignore Y (vertical)
+            n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
+            if n1 < 1e-6 or n2 < 1e-6:
+                continue
+            cos_angle = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
+            angle = np.degrees(np.arccos(cos_angle))
+            if angle > self.corner_angle_threshold:
+                return True
+        return False
 
     def reset(self):
         """
