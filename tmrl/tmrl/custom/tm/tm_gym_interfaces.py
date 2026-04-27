@@ -328,7 +328,11 @@ class TM2020InterfaceLidar(TM2020Interface):
         obs must be a list of numpy arrays
         """
         img, speed, data = self.grab_lidar_speed_and_data()
-        rew, terminated = self.reward_function.compute_reward(pos=np.array([data[2], data[3], data[4]]))
+        rew, terminated = self.reward_function.compute_reward(
+            pos=np.array([data[2], data[3], data[4]]),
+            speed=float(data[0]),
+            action=self._last_action
+        )
         self.img_hist.append(img)
         imgs = np.array(list(self.img_hist), dtype='float32')
         obs = [speed, imgs]
@@ -409,6 +413,9 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         progress = np.array([0], dtype='float32')
         obs = [speed, progress, imgs]
         self.reward_function.reset()
+        self.crash_count = 0
+        self.was_near_wall = False
+        self.last_crash_time = 0.0
         return obs, {}
 
     def get_obs_rew_terminated_info(self):
@@ -417,13 +424,23 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         obs must be a list of numpy arrays
         """
         img, speed, data = self.grab_lidar_speed_and_data()
-        rew, terminated = self.reward_function.compute_reward(pos=np.array([data[2], data[3], data[4]]))
+        rew, terminated = self.reward_function.compute_reward(
+            pos=np.array([data[2], data[3], data[4]]),
+            speed=float(data[0]),
+            action=self._last_action
+        )
         progress = np.array([self.reward_function.cur_idx / self.reward_function.datalen], dtype='float32')
         self.img_hist.append(img)
         imgs = np.array(list(self.img_hist), dtype='float32')
         obs = [speed, progress, imgs]
         end_of_track = bool(data[8])
-        info = {}
+        info = {
+            "crash_count": self.crash_count,
+            "min_lidar": float(np.min(imgs[-1])),
+            "near_wall": near_wall,
+            "finished": end_of_track,
+            "crashed_out": self.crash_count >= self.max_crashes,
+        }
 
         # --- WALL COLLISION DETECTION via LIDAR ---
         current_lidar = imgs[-1]  # only the most recent frame, shape (19,)
@@ -446,12 +463,13 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
                 rew -= self.wall_penalty * (1.0 + speed_factor)
             if self.crash_count >= self.max_crashes:
                 terminated = True
-                # print(f"[DEBUG] Terminated by crash_count={self.crash_count}, min_nonzero={min_nonzero:.1f}")  # remove later
                 print(f"[DEBUG] near_wall={near_wall}, min_nonzero={min_nonzero:.1f}, terminated={terminated}, crash_count={self.crash_count}")
         # ----------------------------------------
 
         if end_of_track:
             rew += self.finish_reward
+            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 3000.0)) * 500.0
+            rew += time_bonus
             terminated = True
         rew += self.constant_penalty
         rew = np.float32(rew)
