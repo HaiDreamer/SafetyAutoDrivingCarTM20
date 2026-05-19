@@ -86,6 +86,7 @@ class RewardFunction:
 
         # The reward is then proportional to the number of passed indexes (i.e., track distance):
         reward = (best_index - self.cur_idx) / 100.0
+        reward *= (1.0 + speed / 5000.0)
 
         if best_index == self.cur_idx:  # if the best index didn't change, we rewind (more Markovian reward)
             min_dist = np.inf
@@ -124,7 +125,7 @@ class RewardFunction:
                 already_slow = speed < 40.0
                 no_corner_ahead = not self._is_corner_ahead()
                 if no_corner_ahead or (already_slow and no_corner_ahead):
-                    brake_penalty = -0.00001      # inital: -0.00001, mid: -0.001
+                    brake_penalty = -0.00001      # inital: -0.00001, mid: -0.001 but init is a good value now, no further problem happens
 
         throttle = action[0] if action is not None else 0.0     # gas/acceleration value the agent output this step, a float in [-1, 1]
         smoothness_penalty = -0.001 * abs(throttle - self.prev_throttle)    # penalizes how much the gas changed between the previous step and the current step

@@ -29,6 +29,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
+from tmrl.debug_dashboard import start_dashboard, update_dashboard
 
 __docformat__ = "google"
 
@@ -625,6 +626,8 @@ class RolloutWorker:
                                        deserializer_mode="synchronous")
         else:
             self.__endpoint = None
+        
+        start_dashboard()
 
     def act(self, obs, test=False):
         """
@@ -703,6 +706,7 @@ class RolloutWorker:
         """
         act = self.act(obs, test=test)
         new_obs, rew, terminated, truncated, info = self.env.step(act)
+        update_dashboard(new_obs, act)
         if self.obs_preprocessor is not None:
             new_obs = self.obs_preprocessor(new_obs)
         if collect_samples:

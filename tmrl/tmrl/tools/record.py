@@ -9,7 +9,10 @@ import numpy as np
 import tmrl.config.config_constants as cfg
 from tmrl.custom.tm.utils.tools import TM2020OpenPlanetClient
 import logging
+# from tmrl.custom.tm.utils.tools import Lidar
+# from tmrl.custom.tm.utils.window import WindowInterface 
 
+# _lidar_log = open("lidar_calibration.txt", "w", buffering=1)
 
 PATH_REWARD = cfg.REWARD_PATH
 DATASET_PATH = cfg.DATASET_PATH
@@ -22,6 +25,10 @@ def record_reward_dist(path_reward=PATH_REWARD, use_keyboard=False):
     positions = []
     client = TM2020OpenPlanetClient()
     path = path_reward
+    # window_interface = WindowInterface("Trackmania")
+    # window_interface.move_and_resize()
+    # _initial_img = window_interface.screenshot()[:386, :760, :3]
+    # lidar_sensor = Lidar(_initial_img)
 
     is_recording = False
     while True:
@@ -37,6 +44,9 @@ def record_reward_dist(path_reward=PATH_REWARD, use_keyboard=False):
         if is_recording:
             data = client.retrieve_data(sleep_if_empty=0.01)  # we need many points to build a smooth curve
             terminated = bool(data[8])
+            # img = window_interface.screenshot()[:386, :760, :3]
+            # lidar = lidar_sensor.lidar_20(img=img, show=False)
+            # _lidar_log.write(f"raw={lidar.tolist()}\n")
 
             if not use_keyboard:
                 early_stop = False

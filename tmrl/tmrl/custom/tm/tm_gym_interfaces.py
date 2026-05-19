@@ -274,12 +274,13 @@ class TM2020InterfaceLidar(TM2020Interface):
         self.last_crash_time = 0.0        # timestamp of last counted crash
         self.crash_debounce_sec = 1.0     # minimum seconds between crash counts
         self.crash_count = 0
-        self.wall_hit_threshold = 5.0    # lidar distance below this = near wall
+        self.wall_hit_threshold = 8.0    # lidar distance below this = collide wall
         self.wall_penalty = 0.5          # (positive) base magnitude — scaled by speed below
-        self.soft_zone = 20.0            # proximity gradient starts here
+        self.soft_zone = 25.0            # proximity gradient starts here
         self.wall_hugging_penalty = 0.05 # per-step penalty while inside soft_zone
         self.was_near_wall = False
         self.max_crashes = 10            # if collide too much, terminate
+        self.did_finish = False
 
     def grab_lidar_speed_and_data(self):
         # raw = self.window_interface.screenshot()
@@ -320,6 +321,7 @@ class TM2020InterfaceLidar(TM2020Interface):
         self.crash_count = 0
         self.was_near_wall = False
         self.last_crash_time = 0.0 
+        self.did_finish = False
         return obs, {}
 
     def get_obs_rew_terminated_info(self):
@@ -337,7 +339,6 @@ class TM2020InterfaceLidar(TM2020Interface):
         imgs = np.array(list(self.img_hist), dtype='float32')
         obs = [speed, imgs]
         end_of_track = bool(data[8])
-        info = {}
 
         # --- WALL COLLISION DETECTION via LIDAR ---
         min_lidar = float(np.min(img))
@@ -372,15 +373,16 @@ class TM2020InterfaceLidar(TM2020Interface):
             "crash_count": self.crash_count,
             "min_lidar": min_lidar,
             "near_wall": near_wall,
-            "finished": end_of_track,
+            "finished": self.did_finish,
             "crashed_out": self.crash_count >= self.max_crashes,
         }
         # ----------------------------------------
 
         if end_of_track:
+            self.did_finish = True
             rew += self.finish_reward
             # bonus for finishing fast: fewer steps = higher bonus
-            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 2000.0)) * 50.0
+            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 4000.0)) * 50.0
             rew += time_bonus
             terminated = True
         rew += self.constant_penalty
@@ -416,6 +418,7 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         self.crash_count = 0
         self.was_near_wall = False
         self.last_crash_time = 0.0
+        self.did_finish = False 
         return obs, {}
 
     def get_obs_rew_terminated_info(self):
@@ -434,13 +437,6 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         imgs = np.array(list(self.img_hist), dtype='float32')
         obs = [speed, progress, imgs]
         end_of_track = bool(data[8])
-        info = {
-            "crash_count": self.crash_count,
-            "min_lidar": float(np.min(imgs[-1])),
-            "near_wall": near_wall,
-            "finished": end_of_track,
-            "crashed_out": self.crash_count >= self.max_crashes,
-        }
 
         # --- WALL COLLISION DETECTION via LIDAR ---
         current_lidar = imgs[-1]  # only the most recent frame, shape (19,)
@@ -467,10 +463,20 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         # ----------------------------------------
 
         if end_of_track:
+            self.did_finish = True
             rew += self.finish_reward
-            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 3000.0)) * 500.0
+            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 4000.0)) * 1000.0
             rew += time_bonus
             terminated = True
+
+        info = {
+            "crash_count": self.crash_count,
+            "min_lidar": float(np.min(imgs[-1])),
+            "near_wall": near_wall,
+            "finished": self.did_finish,
+            "crashed_out": self.crash_count >= self.max_crashes,
+        }
+        
         rew += self.constant_penalty
         rew = np.float32(rew)
         return obs, rew, terminated, info
