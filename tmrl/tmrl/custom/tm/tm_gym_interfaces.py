@@ -280,6 +280,10 @@ class TM2020InterfaceLidar(TM2020Interface):
         self.wall_hugging_penalty = 0.05 # per-step penalty while inside soft_zone
         self.was_near_wall = False
         self.max_crashes = 10            # if collide too much, terminate
+        self._prev_speed = 0.0
+        # self._speed_log = open("speed_drop_log.csv", "w", buffering=1)
+        # self._speed_log.write("prev_speed,curr_speed,drop,gas,brake\n")
+        self.speed_drop_threshold = 5.0  # m/s per step
         self.did_finish = False
 
     def grab_lidar_speed_and_data(self):
@@ -322,6 +326,7 @@ class TM2020InterfaceLidar(TM2020Interface):
         self.was_near_wall = False
         self.last_crash_time = 0.0 
         self.did_finish = False
+        self._prev_speed = 0.0
         return obs, {}
 
     def get_obs_rew_terminated_info(self):
@@ -339,6 +344,14 @@ class TM2020InterfaceLidar(TM2020Interface):
         imgs = np.array(list(self.img_hist), dtype='float32')
         obs = [speed, imgs]
         end_of_track = bool(data[8])
+        
+        curr_speed = float(speed[0])
+        speed_drop = self._prev_speed - curr_speed
+        pre_impact_speed = self._prev_speed 
+        # gas = float(self._last_action[0])
+        # brake = float(self._last_action[1])
+        # self._speed_log.write(f"{self._prev_speed:.2f},{curr_speed:.2f},{drop:.2f},{gas:.2f},{brake:.2f}\n")
+        self._prev_speed = curr_speed
 
         # --- WALL COLLISION DETECTION via LIDAR ---
         min_lidar = float(np.min(img))
@@ -347,6 +360,7 @@ class TM2020InterfaceLidar(TM2020Interface):
         min_nonzero = float(np.min(min_lidar_nonzero)) if len(min_lidar_nonzero) > 0 else 999.0
         # _lidar_log.write(f"{min_nonzero:.2f} near={min_nonzero < self.wall_hit_threshold} raw={img.tolist()}\n")  # ADD
         near_wall = min_nonzero < self.wall_hit_threshold
+        impact_detected = near_wall or (speed_drop > self.speed_drop_threshold and not near_wall)
 
         # 1. Proximity gradient: small continuous penalty scaling from soft_zone down to wall_hit_threshold
         if min_nonzero < self.soft_zone:
@@ -354,18 +368,17 @@ class TM2020InterfaceLidar(TM2020Interface):
             rew -= self.wall_hugging_penalty * float(np.clip(t, 0.0, 1.0))
 
         # 2. Crash event: debounced, speed-scaled hard penalty
-        if near_wall:
+        if impact_detected:
             now = time.time()
             if now - self.last_crash_time >= self.crash_debounce_sec:
                 self.crash_count += 1
                 self.last_crash_time = now
-                speed_factor = float(speed[0]) / 100.0
-                rew -= self.wall_penalty * (1.0 + speed_factor)   # e.g. -1.0 at 100 km/h
+                speed_factor = min((pre_impact_speed / 27.78) ** 2, 4.0)    # cap at 200
+                rew -= self.wall_penalty * (1.0 + speed_factor)
             if self.crash_count >= self.max_crashes:
                 terminated = True
-                # print(f"[DEBUG] Terminated by crash_count={self.crash_count}, min_nonzero={min_nonzero:.1f}")  # remove later
-                print(f"[DEBUG] near_wall={near_wall}, min_nonzero={min_nonzero:.1f}, terminated={terminated}, crash_count={self.crash_count}")
-            self.was_near_wall = True
+                print(f"[DEBUG] impact_detected={near_wall}, min_nonzero={min_nonzero:.1f}, terminated={terminated}, crash_count={self.crash_count}")
+            self.was_near_wall = near_wall
         else:
             self.was_near_wall = False
 
@@ -419,6 +432,7 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         self.was_near_wall = False
         self.last_crash_time = 0.0
         self.did_finish = False 
+        self._prev_speed = 0.0 
         return obs, {}
 
     def get_obs_rew_terminated_info(self):
@@ -438,34 +452,47 @@ class TM2020InterfaceLidarProgress(TM2020InterfaceLidar):
         obs = [speed, progress, imgs]
         end_of_track = bool(data[8])
 
+        curr_speed = float(speed[0])
+        speed_drop = self._prev_speed - curr_speed
+        pre_impact_speed = self._prev_speed
+        # gas = float(self._last_action[0])
+        # brake = float(self._last_action[1])
+        # self._speed_log.write(f"{self._prev_speed:.2f},{curr_speed:.2f},{drop:.2f},{gas:.2f},{brake:.2f}\n")
+        self._prev_speed = curr_speed
+
         # --- WALL COLLISION DETECTION via LIDAR ---
+        min_lidar = float(np.min(img))
         current_lidar = imgs[-1]  # only the most recent frame, shape (19,)
         min_lidar_nonzero = current_lidar[current_lidar > 0]
         min_nonzero = float(np.min(min_lidar_nonzero)) if len(min_lidar_nonzero) > 0 else 999.0
+        # _lidar_log.write(f"{min_nonzero:.2f} near={min_nonzero < self.wall_hit_threshold} raw={img.tolist()}\n")  # ADD
         near_wall = min_nonzero < self.wall_hit_threshold
+        impact_detected = near_wall or (speed_drop > self.speed_drop_threshold and not near_wall)
 
-        # Proximity gradient
+        # 1. Proximity gradient: small continuous penalty scaling from soft_zone down to wall_hit_threshold
         if min_nonzero < self.soft_zone:
             t = (self.soft_zone - min_nonzero) / (self.soft_zone - self.wall_hit_threshold)
             rew -= self.wall_hugging_penalty * float(np.clip(t, 0.0, 1.0))
 
-        # Crash event: debounced, speed-scaled hard penalty
-        if near_wall:
+        # 2. Crash event: debounced, speed-scaled hard penalty
+        if impact_detected:
             now = time.time()
             if now - self.last_crash_time >= self.crash_debounce_sec:
                 self.crash_count += 1
                 self.last_crash_time = now
-                speed_factor = float(speed[0]) / 100.0
+                speed_factor = min((pre_impact_speed / 27.78) ** 2, 4.0)    # cap at 200
                 rew -= self.wall_penalty * (1.0 + speed_factor)
             if self.crash_count >= self.max_crashes:
                 terminated = True
-                print(f"[DEBUG] near_wall={near_wall}, min_nonzero={min_nonzero:.1f}, terminated={terminated}, crash_count={self.crash_count}")
-        # ----------------------------------------
+                print(f"[DEBUG] impact_detected={impact_detected}, min_nonzero={min_nonzero:.1f}, terminated={terminated}, crash_count={self.crash_count}")
+            self.was_near_wall = near_wall
+        else:
+            self.was_near_wall = False
 
         if end_of_track:
             self.did_finish = True
             rew += self.finish_reward
-            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 4000.0)) * 1000.0
+            time_bonus = max(0.0, 1.0 - (self.reward_function.step_counter / 4000.0)) * 50.0
             rew += time_bonus
             terminated = True
 
